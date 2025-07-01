@@ -51,15 +51,7 @@ The model was trained on a proprietary dataset of financial documents and transa
 |---------------|----------|----------------------------|
 | Performance   | 0.87     | 0.92                       |
 
-## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Contact
 
 For questions or suggestions, please contact:
 - Harshal - [harshal@example.com](mailto:harshal@example.com)
