@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance NER Analysis</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">
+            <i class="fas fa-chart-line"></i>
+            <span>Finance NER</span>
+        </div>
+        <ul class="nav-links">
+            <li><a href="#home" class="active">Home</a></li>
+            <li><a href="#upload">Text Input</a></li>
+            <li><a href="#analysis">Analysis</a></li>
+            <!-- <li><a href="#dashboard">Dashboard</a></li> -->
+        </ul>
+    </nav>
+
+    <main>
+        <section id="home" class="hero-section">
+            <div class="hero-content">
+                <h1>Financial Document Analysis</h1>
+                <p>Enter your Financial information for intelligent analysis and fraud detection</p>
+                <button class="cta-button" onclick="scrollToUpload()">Get Started</button>
+            </div>
+        </section>
+
+        <section id="upload" class="upload-section">
+            <div class="container">
+                <h2>Enter Text</h2>
+                <div class="upload-box">
+                    <i class="fas fa-keyboard"></i>
+                    <p>Type or paste your text below:</p>
+                    <textarea id="textInput" rows="10" placeholder="Enter plain text here..." style="width: 100%; padding: 10px; font-size: 16px;"></textarea>
+                    <button class="upload-button" onclick="submitText()">Submit</button>
+                </div>
+                <div id="uploadProgress" class="progress-bar" style="display: none;">
+                    <div class="progress"></div>
+                    <p class="progress-text">Processing: 0%</p>
+                </div>
+            </div>
+        </section>
+        
+        <script>
+            async function submitText() {
+                const enteredText = document.getElementById('textInput').value.trim();
+        
+                if (enteredText === "") {
+                    alert("Please enter some text.");
+                    return;
+                }
+        
+                // Show progress bar
+                document.getElementById("uploadProgress").style.display = "block";
+                document.querySelector(".progress-text").innerText = "Processing NER...";
+        
+                try {
+                    // First API call to /ner endpoint
+                    const nerResponse = await fetch("http://localhost:8000/ner", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({ text: enteredText, ner_res: {} })
+                    });
+        
+                    const nerData = await nerResponse.json();
+                    console.log("NER API Response:", nerData);
+        
+                    if (nerData.status === "success") {
+                        const entityData = nerData.message;
+                        const originalText = enteredText;
+        
+                        // Sort entities by start index to ensure proper order
+                        const sortedEntities = Object.values(entityData).sort((a, b) => a[3] - b[3]);
+        
+                        let highlightedHTML = "";
+                        let lastIndex = 0;
+        
+                        for (const [word, entity, score, start, end] of sortedEntities) {
+                            highlightedHTML += escapeHTML(originalText.slice(lastIndex, start));
+                            const color = getColorForEntity(entity);
+                            highlightedHTML += `<span class="entity" style="background-color: ${color};" title="${entity} (${(score * 100).toFixed(1)}%)">${escapeHTML(originalText.slice(start, end))}</span>`;
+                            lastIndex = end;
+                        }
+        
+                        // Add any remaining text after the last entity
+                        highlightedHTML += escapeHTML(originalText.slice(lastIndex));
+        
+                        // Inject the highlighted text into the Named Entities section
+                        document.getElementById("namedEntities").innerHTML = highlightedHTML;
+                        
+                        // Update progress bar
+                        document.querySelector(".progress-text").innerText = "Getting transaction summary...";
+                        
+                        // Second API call to /summary endpoint with NER results
+                        try {
+                            const summaryResponse = await fetch("http://localhost:8000/summary", {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json"
+                                },
+                                body: JSON.stringify({ 
+                                    text: enteredText, 
+                                    ner_res: nerData.message 
+                                })
+                            });
+                            
+                            const summaryData = await summaryResponse.json();
+                            console.log("Summary API Response:", summaryData);
+                            
+                            if (summaryData.status === "success") {
+                                // Convert markdown to HTML
+                                const converter = new showdown.Converter();
+                                const summaryHTML = converter.makeHtml(summaryData.summary);
+                                
+                                // Inject the summary into the Transaction Summary section
+                                document.getElementById("transactionSummary").innerHTML = summaryHTML;
+                            } else {
+                                document.getElementById("transactionSummary").innerHTML = 
+                                    "<p>Unable to generate transaction summary.</p>";
+                            }
+                        } catch (summaryError) {
+                            console.error("Summary API Error:", summaryError);
+                            document.getElementById("transactionSummary").innerHTML = 
+                                "<p>Error fetching transaction summary.</p>";
+                        }
+
+                        try {
+                            const analysisResponse = await fetch("http://localhost:8000/fraud_analysis", {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json"
+                                },
+                                body: JSON.stringify({ 
+                                    text: enteredText, 
+                                    ner_res: nerData.message 
+                                })
+                            });
+                            
+                            const analysisData = await analysisResponse.json();
+                            console.log("Analysis API Response:", analysisData);
+                            
+                            if (analysisData.status === "success") {
+                                // Convert markdown to HTML
+                                const converter = new showdown.Converter();
+                                const analysisHTML = converter.makeHtml(analysisData.analysis);
+                                
+                                // Inject the summary into the Transaction Summary section
+                                document.getElementById("fraudAnalysis").innerHTML = analysisHTML;
+                            } else {
+                                document.getElementById("fraudAnalysis").innerHTML = 
+                                    "<p>Unable to generate transaction fraud analysis.</p>";
+                            }
+                        } catch (analysisError) {
+                            console.error("Fraud Analysis API Error:", analysisError);
+                            document.getElementById("fraudAnalysis").innerHTML = 
+                                "<p>Error fetching fraud Analysis.</p>";
+                        }
+
+                        // Hide progress bar after a short delay
+                        document.querySelector(".progress-text").innerText = "Done!";
+                    } else {
+                        alert("NER analysis failed.");
+                    }
+        
+                } catch (error) {
+                    console.error("API Error:", error);
+                    alert("Something went wrong while calling the API.");
+                } finally {
+                    setTimeout(() => {
+                        document.getElementById("uploadProgress").style.display = "none";
+                        document.querySelector(".progress-text").innerText = "Processing: 0%";
+                    }, 2000);
+                }
+            }
+        
+            // Helper function to escape HTML special characters
+            function escapeHTML(str) {
+                return str.replace(/&/g, "&amp;")
+                          .replace(/</g, "&lt;")
+                          .replace(/>/g, "&gt;");
+            }
+        
+            // Create a color map for custom entity types
+            const entityColorMap = {};
+            function getColorForEntity(entity) {
+                if (!entityColorMap[entity]) {
+                    const hue = Math.floor(Math.random() * 360);
+                    entityColorMap[entity] = `hsl(${hue}, 70%, 80%)`;
+                }
+                return entityColorMap[entity];
+            }
+            
+            // Scroll to upload section function
+            function scrollToUpload() {
+                document.getElementById('upload').scrollIntoView({ behavior: 'smooth' });
+            }
+        </script>
+        <style>
+            .entity {
+                padding: 2px 4px;
+                margin: 1px;
+                border-radius: 4px;
+                font-weight: bold;
+                display: inline-block;
+                color: #000;
+                cursor: help;
+                transition: background-color 0.3s ease;
+            }
+            
+            /* Additional styling for markdown content */
+            #transactionSummary {
+                font-family: 'Arial', sans-serif;
+            }
+            
+            #transactionSummary h1, 
+            #transactionSummary h2, 
+            #transactionSummary h3, 
+            #transactionSummary h4 {
+                margin-top: 1em;
+                margin-bottom: 0.5em;
+                color: #2c3e50;
+            }
+            
+            #transactionSummary ul, 
+            #transactionSummary ol {
+                padding-left: 1.5em;
+            }
+            
+            #transactionSummary table {
+                border-collapse: collapse;
+                width: 100%;
+                margin: 1em 0;
+            }
+            
+            #transactionSummary th, 
+            #transactionSummary td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }
+            
+            #transactionSummary th {
+                background-color: #f2f2f2;
+            }
+            
+            #transactionSummary tr:nth-child(even) {
+                background-color: #f9f9f9;
+            }
+        </style>        
+        
+        <section id="analysis" class="analysis-section">
+            <div class="container">
+                <h2>Analysis Results</h2>
+                <!-- <div class="results-grid">
+                    <div class="result-card">
+                        <h3>Named Entities</h3>
+                        <div id="namedEntities" class="result-content">
+                        </div>
+                    </div>
+                    <div class="result-card">
+                        <h3>Transaction Summary</h3>
+                        <div id="transactionSummary" class="result-content">
+                        </div>
+                    </div>
+                    <div class="result-card">
+                        <h3>Fraud Risk Analysis</h3>
+                        <div id="fraudAnalysis" class="result-content">
+                            <canvas id="fraudChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section> -->
+        <div class="results-grid">
+            <div class="result-card named-entities-card">
+                <h3>Named Entities</h3>
+                <div id="namedEntities" class="result-content">
+                    <!-- Results will be populated here -->
+                </div>
+            </div>
+            <div class="result-card fraud-analysis-card">
+                <h3>Fraud Risk Analysis</h3>
+                <div id="fraudAnalysis" class="result-content">
+                    <canvas id="fraudChart"></canvas>
+                </div>
+            </div>
+            <div class="result-card summary-card">
+                <h3>Transaction Summary</h3>
+                <div id="transactionSummary" class="result-content">
+                    <!-- Summary will be populated here -->
+                </div>
+            </div>
+        </div>
+        <!-- <section id="dashboard" class="dashboard-section">
+            <div class="container">
+                <h2>Dashboard</h2>
+                <div class="dashboard-grid">
+                    <div class="dashboard-card">
+                        <h3>Recent Documents</h3>
+                        <div id="recentDocuments" class="dashboard-content">
+                        </div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>Analysis History</h3>
+                        <div id="analysisHistory" class="dashboard-content">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section> -->
+    </main>
+
+    <footer>
+        <p>&copy; 2024 Finance NER Analysis. All rights reserved.</p>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
