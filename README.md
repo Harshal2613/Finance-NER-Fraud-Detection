@@ -51,11 +51,3 @@ The model was trained on a proprietary dataset of financial documents and transa
 |---------------|----------|----------------------------|
 | Performance   | 0.87     | 0.92                       |
 
-
-
-For questions or suggestions, please contact:
-- Harshal - [harshal@example.com](mailto:harshal@example.com)
-
----
-
-*Note: This is a template README. Please update with your actual project details, installation steps, usage examples, and contact information.*
